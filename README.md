@@ -22,6 +22,14 @@ uv run uvicorn issue_tracker.main:create_app --factory --port 8001
 
 Interactive API docs are at http://127.0.0.1:8001/docs.
 
+## Run the frontend
+
+The dev server sends `/api` requests to the backend on port 8001. Opening the page creates an issue.
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
 ## Load the mock data
 
 This loads the fictional trucks, repair shops, and Truck 214 scenario. Run it again to reset between demos. It deletes all bookings, trucks, shops, and any issue attached to a truck.
@@ -83,5 +91,6 @@ Dependencies point inward, so the domain knows nothing about HTTP or SQL.
 | `src/issue_tracker/domain/` | The `Issue`, `Truck`, `MaintenanceShop`, and `Booking` entities |
 | `src/issue_tracker/infrastructure/` | SQLAlchemy models, repository implementations, and fictional mock data |
 | `src/issue_tracker/main.py` | App factory that wires the layers together |
+| `frontend/` | React UI |
 | `migrations/` | Alembic schema migrations |
 | `openspec/` | Specs and change proposals |

@@ -1,37 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
-async function createIssue(id, signal) {
-  const res = await fetch('/api/issues', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id }),
-    signal,
-  })
+async function createIssue() {
+  const res = await fetch('/api/issues', { method: 'POST' })
   if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
   return res.json()
 }
 
 function App() {
-  // One GUID per page load. Retries and StrictMode's double-run reuse it, and
-  // the backend treats a repeated GUID as the same issue.
-  const [guid] = useState(() => crypto.randomUUID())
   const [attempt, setAttempt] = useState(0)
   const [issue, setIssue] = useState(null)
   const [error, setError] = useState(null)
+  // Every POST creates a new issue, so StrictMode's second effect run must not send one.
+  const lastAttempt = useRef(null)
 
   useEffect(() => {
-    const controller = new AbortController()
-    createIssue(guid, controller.signal)
+    if (lastAttempt.current === attempt) return
+    lastAttempt.current = attempt
+    createIssue()
       .then((created) => {
         setIssue(created)
         setError(null)
       })
-      .catch((err) => {
-        if (err.name !== 'AbortError') setError(err.message)
-      })
-    return () => controller.abort()
-  }, [guid, attempt])
+      .catch((err) => setError(err.message))
+  }, [attempt])
 
   return (
     <main className="issue-page">
@@ -41,11 +33,7 @@ function App() {
           <h2>Issue created</h2>
           <dl>
             <dt>ID</dt>
-            <dd>{issue.id}</dd>
-            <dt>Status</dt>
-            <dd>{issue.status}</dd>
-            <dt>Created</dt>
-            <dd>{new Date(issue.created_at).toLocaleString()}</dd>
+            <dd>{issue.issueId}</dd>
           </dl>
         </section>
       )}

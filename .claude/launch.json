@@ -4,8 +4,8 @@
     {
       "name": "backend",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd backend && uv run uvicorn main:app --port 8000"],
-      "port": 8000
+      "runtimeArgs": ["-c", "uv run uvicorn issue_tracker.main:create_app --factory --port 8001"],
+      "port": 8001
     },
     {
       "name": "frontend",
