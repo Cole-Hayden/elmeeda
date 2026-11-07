@@ -21,13 +21,15 @@ async def count_issues(database_url: str, issue_id: UUID) -> int:
     return count
 
 
-async def test_post_issue_returns_201_with_only_an_issue_id(client: AsyncClient) -> None:
+async def test_post_issue_returns_201_with_an_issue_id_that_needs_info(
+    client: AsyncClient,
+) -> None:
     response = await client.post("/issues")
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body) == {"issueId"}
     UUID(body["issueId"])
+    assert body["status"] == "needs_info"
 
 
 async def test_post_issue_saves_the_issue_to_the_database(

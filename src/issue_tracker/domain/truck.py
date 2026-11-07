@@ -9,3 +9,5 @@ class Truck:
     make: str
     model: str
     year: int
+    vin: str | None = None
+    engine: str | None = None

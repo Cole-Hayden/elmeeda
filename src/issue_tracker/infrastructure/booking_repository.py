@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -8,14 +10,20 @@ from issue_tracker.application.ports import (
     StorageUnavailableError,
 )
 from issue_tracker.domain.booking import Booking
+from issue_tracker.domain.job import select_job
+from issue_tracker.domain.vendor_matching import calculate_quote, check_capability, check_tow
 from issue_tracker.infrastructure.issue_repository import issue_from_model
+from issue_tracker.infrastructure.job_repository import job_from_model
 from issue_tracker.infrastructure.models import (
     LOCAL_TIME_ZONE,
     BookingModel,
     IssueModel,
+    JobModel,
     MaintenanceShopModel,
+    TruckModel,
 )
 from issue_tracker.infrastructure.shop_repository import shop_from_model
+from issue_tracker.infrastructure.truck_repository import truck_from_model
 
 
 def booking_from_model(model: BookingModel) -> Booking:
@@ -47,6 +55,16 @@ class SqlAlchemyBookingRepository:
             raise StorageUnavailableError from exc
         return booking_from_model(model) if model else None
 
+    async def get_for_issue(self, issue_id: UUID) -> Booking | None:
+        try:
+            async with self._session_factory() as session:
+                model = await session.scalar(
+                    select(BookingModel).where(BookingModel.issue_id == issue_id)
+                )
+        except (SQLAlchemyError, OSError) as exc:
+            raise StorageUnavailableError from exc
+        return booking_from_model(model) if model else None
+
     @staticmethod
     async def _add_in_transaction(session: AsyncSession, booking: Booking) -> Booking:
         # Locks are always taken issue first, then shop, so bookings can't deadlock. The issue
@@ -67,7 +85,8 @@ class SqlAlchemyBookingRepository:
             raise BookingRejectedError(BookingRejection.ISSUE_ALREADY_BOOKED)
 
         issue = issue_from_model(issue_model)
-        if issue.problem is None or issue.missing_details():
+        truck_model = await session.get(TruckModel, issue.truck_id) if issue.truck_id else None
+        if issue.problem is None or truck_model is None or issue.missing_details():
             raise BookingRejectedError(BookingRejection.ISSUE_INCOMPLETE)
 
         shop_model = await session.scalar(
@@ -79,10 +98,19 @@ class SqlAlchemyBookingRepository:
             raise BookingRejectedError(BookingRejection.SHOP_NOT_FOUND)
 
         shop = shop_from_model(shop_model)
+        truck = truck_from_model(truck_model)
+        job_models = await session.scalars(
+            select(JobModel).where(JobModel.problem == issue.problem.value)
+        )
+        job = select_job((job_from_model(model) for model in job_models), issue.problem, truck)
+        capability = shop.capability_for(job.job_code) if job else None
+        if job is None or capability is None or check_capability(job, truck, shop):
+            raise BookingRejectedError(BookingRejection.JOB_NOT_OFFERED)
         if shop.open_bays < 1:
             raise BookingRejectedError(BookingRejection.NO_OPEN_BAY)
         if (
-            shop.estimate_for(issue.problem) != booking.estimate
+            check_tow(issue, shop)
+            or calculate_quote(issue, job, capability, shop).estimate != booking.estimate
             or shop.earliest_start != booking.start_time
         ):
             raise BookingRejectedError(BookingRejection.QUOTE_CHANGED)

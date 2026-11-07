@@ -1,12 +1,14 @@
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from datetime import date
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from issue_tracker.api.issues import router as issues_router
+from issue_tracker.application.clock import central_today
 from issue_tracker.application.ports import StorageUnavailableError
 from issue_tracker.config import Settings
 
@@ -21,7 +23,9 @@ async def handle_storage_unavailable(request: Request, exc: Exception) -> JSONRe
     )
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, today: Callable[[], date] = central_today
+) -> FastAPI:
     resolved_settings = settings or Settings()
 
     @asynccontextmanager
@@ -32,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await engine.dispose()
 
     app = FastAPI(title="Issue Tracker", lifespan=lifespan)
+    app.state.today = today
     app.add_exception_handler(StorageUnavailableError, handle_storage_unavailable)
     app.include_router(issues_router)
     return app

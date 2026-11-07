@@ -1,29 +1,36 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
-async function createIssue() {
-  const res = await fetch('/api/issues', { method: 'POST' })
+async function createIssue(idempotencyKey, signal) {
+  const res = await fetch('/api/issues', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    signal,
+  })
   if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
   return res.json()
 }
 
 function App() {
+  // One key per page load. Retries and StrictMode's double-run reuse it, and
+  // the backend treats a repeated key as the same issue.
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
   const [attempt, setAttempt] = useState(0)
   const [issue, setIssue] = useState(null)
   const [error, setError] = useState(null)
-  // Every POST creates a new issue, so StrictMode's second effect run must not send one.
-  const lastAttempt = useRef(null)
 
   useEffect(() => {
-    if (lastAttempt.current === attempt) return
-    lastAttempt.current = attempt
-    createIssue()
+    const controller = new AbortController()
+    createIssue(idempotencyKey, controller.signal)
       .then((created) => {
         setIssue(created)
         setError(null)
       })
-      .catch((err) => setError(err.message))
-  }, [attempt])
+      .catch((err) => {
+        if (err.name !== 'AbortError') setError(err.message)
+      })
+    return () => controller.abort()
+  }, [idempotencyKey, attempt])
 
   return (
     <main className="issue-page">

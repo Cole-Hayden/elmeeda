@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from issue_tracker.application.booking_service import BookingService
 from issue_tracker.domain.booking import BOOKING_ID_ALPHABET, Booking
@@ -16,6 +16,9 @@ class FakeBookingRepository:
 
     async def get(self, booking_id: str) -> Booking | None:
         return next((b for b in self.saved if b.booking_id == booking_id), None)
+
+    async def get_for_issue(self, issue_id: UUID) -> Booking | None:
+        return next((b for b in self.saved if b.issue_id == issue_id), None)
 
 
 def make_booking() -> Booking:
