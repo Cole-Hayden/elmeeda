@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd backend && uv run uvicorn main:app --port 8000"],
+      "port": 8000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd frontend && npm run dev"],
+      "port": 5173
+    }
+  ]
+}
