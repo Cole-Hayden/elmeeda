@@ -57,6 +57,9 @@ class FakeBookings:
     async def get_for_issue(self, issue_id: UUID) -> Booking | None:
         return self.booked
 
+    async def get_for_truck(self, truck_id: UUID) -> Booking | None:
+        return None
+
 
 def make_service(
     shops: tuple[MaintenanceShop, ...] = SHOPS,

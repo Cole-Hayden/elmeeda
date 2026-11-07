@@ -32,3 +32,14 @@ class Booking:
             estimate=estimate,
             start_time=start_time,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class BookedRepair:
+    """A booking with the details a person needs to recognize it."""
+
+    booking: Booking
+    truck_unit_number: str
+    problem: str | None
+    location: str | None
+    shop_name: str

@@ -87,7 +87,6 @@ async def test_post_issue_accepts_partial_details(
         "max_distance_miles",
         "max_budget",
         "symptoms",
-        "contact",
     )
 
 

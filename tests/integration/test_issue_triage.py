@@ -146,7 +146,6 @@ async def test_missing_details_use_api_field_names(
         "maxDistanceMiles",
         "maxBudget",
         "symptoms",
-        "contact",
         "loaded",
         "hazmat",
     ]

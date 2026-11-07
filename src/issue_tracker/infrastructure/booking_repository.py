@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -9,7 +9,7 @@ from issue_tracker.application.ports import (
     BookingRejection,
     StorageUnavailableError,
 )
-from issue_tracker.domain.booking import Booking
+from issue_tracker.domain.booking import BookedRepair, Booking
 from issue_tracker.domain.job import select_job
 from issue_tracker.domain.vendor_matching import calculate_quote, check_capability, check_tow
 from issue_tracker.infrastructure.issue_repository import issue_from_model
@@ -33,6 +33,14 @@ def booking_from_model(model: BookingModel) -> Booking:
         shop_id=model.shop_id,
         estimate=model.estimate,
         start_time=model.start_time.astimezone(LOCAL_TIME_ZONE),
+    )
+
+
+def _truck_booking(truck_id: UUID) -> Select[BookingModel]:
+    return (
+        select(BookingModel)
+        .join(IssueModel, BookingModel.issue_id == IssueModel.issue_id)
+        .where(IssueModel.truck_id == truck_id)
     )
 
 
@@ -65,11 +73,47 @@ class SqlAlchemyBookingRepository:
             raise StorageUnavailableError from exc
         return booking_from_model(model) if model else None
 
+    async def get_for_truck(self, truck_id: UUID) -> Booking | None:
+        try:
+            async with self._session_factory() as session:
+                model = await session.scalar(_truck_booking(truck_id))
+        except (SQLAlchemyError, OSError) as exc:
+            raise StorageUnavailableError from exc
+        return booking_from_model(model) if model else None
+
+    async def list_booked_repairs(self) -> list[BookedRepair]:
+        statement = (
+            select(BookingModel, IssueModel, TruckModel.unit_number, MaintenanceShopModel.name)
+            .join(IssueModel, BookingModel.issue_id == IssueModel.issue_id)
+            .join(TruckModel, IssueModel.truck_id == TruckModel.truck_id)
+            .join(MaintenanceShopModel, BookingModel.shop_id == MaintenanceShopModel.shop_id)
+            .order_by(IssueModel.created_at.desc(), BookingModel.booking_id)
+        )
+        try:
+            async with self._session_factory() as session:
+                rows = (await session.execute(statement)).all()
+                repairs = []
+                for booking, issue_model, unit_number, shop_name in rows:
+                    issue = issue_from_model(issue_model)
+                    repairs.append(
+                        BookedRepair(
+                            booking=booking_from_model(booking),
+                            truck_unit_number=unit_number,
+                            problem=issue.problem.value if issue.problem else None,
+                            location=issue.location.description if issue.location else None,
+                            shop_name=shop_name,
+                        )
+                    )
+                return repairs
+        except (SQLAlchemyError, OSError) as exc:
+            raise StorageUnavailableError from exc
+
     @staticmethod
     async def _add_in_transaction(session: AsyncSession, booking: Booking) -> Booking:
-        # Locks are always taken issue first, then shop, so bookings can't deadlock. The issue
-        # lock makes retries for one breakdown wait their turn; the shop lock does the same for
-        # calls competing over its last bay.
+        # Locks are always taken issue, then truck, then shop, so bookings can't deadlock. The
+        # issue lock makes retries for one breakdown wait their turn. The truck lock does the
+        # same across calls, because each call creates its own issue. The shop lock does the
+        # same for calls competing over its last bay.
         issue_model = await session.scalar(
             select(IssueModel).where(IssueModel.issue_id == booking.issue_id).with_for_update()
         )
@@ -85,9 +129,22 @@ class SqlAlchemyBookingRepository:
             raise BookingRejectedError(BookingRejection.ISSUE_ALREADY_BOOKED)
 
         issue = issue_from_model(issue_model)
-        truck_model = await session.get(TruckModel, issue.truck_id) if issue.truck_id else None
-        if issue.problem is None or truck_model is None or issue.missing_details():
+        truck_model = (
+            await session.scalar(
+                select(TruckModel).where(TruckModel.truck_id == issue.truck_id).with_for_update()
+            )
+            if issue.truck_id
+            else None
+        )
+        if (
+            issue.problem is None
+            or issue.needed_by is None
+            or truck_model is None
+            or issue.missing_details()
+        ):
             raise BookingRejectedError(BookingRejection.ISSUE_INCOMPLETE)
+        if await session.scalar(_truck_booking(truck_model.truck_id)) is not None:
+            raise BookingRejectedError(BookingRejection.TRUCK_ALREADY_BOOKED)
 
         shop_model = await session.scalar(
             select(MaintenanceShopModel)

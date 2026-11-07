@@ -7,7 +7,7 @@ Works out what is still missing from an issue, what job it needs, and what state
 ## ADDED Requirements
 
 ### Requirement: Report missing details
-The triage result SHALL list in `missingDetails` every detail still needed to plan a repair. `truckUnitNumber`, `problem`, `location`, `drivable`, `neededBy`, `maxDistanceMiles`, `maxBudget`, `symptoms`, and `contact` SHALL always be needed. `loaded` and `hazmat` SHALL be needed only when the truck needs a tow. `odometerMiles` and `faultCodes` SHALL never be needed.
+The triage result SHALL list in `missingDetails` every detail still needed to plan a repair. `truckUnitNumber`, `problem`, `location`, `drivable`, `neededBy`, `maxDistanceMiles`, `maxBudget`, and `symptoms` SHALL always be needed. `loaded` and `hazmat` SHALL be needed only when the truck needs a tow. `contact`, `odometerMiles`, and `faultCodes` SHALL never be needed.
 
 #### Scenario: Details are missing
 - **WHEN** an issue has no `drivable` value

@@ -32,7 +32,6 @@ BEFORE_ANY_ANSWER = (
     "max_distance_miles",
     "max_budget",
     "symptoms",
-    "contact",
 )
 
 

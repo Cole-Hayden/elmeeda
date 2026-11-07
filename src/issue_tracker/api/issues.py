@@ -13,6 +13,7 @@ from issue_tracker.application.issue_service import (
     UnknownTruckError,
 )
 from issue_tracker.application.ports import IssueBookedError, IssueNotFoundError
+from issue_tracker.application.shop_checks import ShopFailure
 from issue_tracker.application.triage_service import TriageResult, TriageService, TriageStatus
 from issue_tracker.domain.issue import Contact, FaultCode, Issue, ProblemType
 from issue_tracker.domain.location import Location
@@ -187,6 +188,12 @@ class ExcludedResponse(BaseModel):
     reason: ExclusionReason
 
 
+class UnavailableResponse(BaseModel):
+    shop_id: UUID = Field(serialization_alias="shopId")
+    name: str
+    reason: ShopFailure
+
+
 class TriageResponse(BaseModel):
     issue_id: UUID = Field(serialization_alias="issueId")
     status: TriageStatus
@@ -197,6 +204,7 @@ class TriageResponse(BaseModel):
     job: JobResponse | None
     options: list[OptionResponse]
     excluded: list[ExcludedResponse]
+    unavailable: list[UnavailableResponse]
 
 
 def details_response(issue: Issue) -> DetailsResponse:
@@ -286,6 +294,12 @@ def triage_response(result: TriageResult) -> TriageResponse:
             )
             for vendor in result.excluded
         ],
+        unavailable=[
+            UnavailableResponse(
+                shop_id=vendor.shop.shop_id, name=vendor.shop.name, reason=vendor.failure
+            )
+            for vendor in result.unavailable
+        ],
     )
 
 
@@ -314,6 +328,16 @@ def invalid_details(detail: str) -> HTTPException:
 
 def issue_not_found() -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No issue has that ID.")
+
+
+@router.get("")
+async def list_issues(
+    issues: Annotated[IssueService, Depends(get_issue_service)],
+    triage: Annotated[TriageService, Depends(get_triage_service)],
+) -> list[TriageResponse]:
+    return [
+        triage_response(await triage.triage(issue)) for issue in await issues.list_recent_issues()
+    ]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

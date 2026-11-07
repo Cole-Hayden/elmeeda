@@ -20,6 +20,9 @@ class FakeBookingRepository:
     async def get_for_issue(self, issue_id: UUID) -> Booking | None:
         return next((b for b in self.saved if b.issue_id == issue_id), None)
 
+    async def get_for_truck(self, truck_id: UUID) -> Booking | None:
+        return None
+
 
 def make_booking() -> Booking:
     return Booking.create(uuid4(), uuid4(), Decimal("1120.00"), datetime(2026, 11, 7, tzinfo=UTC))

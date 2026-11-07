@@ -50,7 +50,7 @@ Prices, bays, and start times change, so storing them on the issue would create 
 
 ### Required details depend on the issue
 
-`Issue.missing_details()` gains `symptoms` and `contact`. It also asks for `loaded` and `hazmat` when the truck needs a tow. Other fields keep their current meaning, and `odometerMiles` and `faultCodes` are never required.
+`Issue.missing_details()` gains `symptoms`. It also asks for `loaded` and `hazmat` when the truck needs a tow. Other fields keep their current meaning, and `contact`, `odometerMiles`, and `faultCodes` are never required.
 
 A truck needs a tow when `drivable` is false or `problem` is `brake_failure`. The brake rule applies whatever the driver says, because driving with failed brakes isn't a safe option to offer. `drivable` is still required for every issue.
 

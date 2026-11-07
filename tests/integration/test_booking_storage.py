@@ -29,6 +29,7 @@ from issue_tracker.infrastructure.mock_data import (
     JOBS,
     MILLRACE_DIESEL,
     ROCKDALE_JUNCTION,
+    SCENARIO_DAY,
     SCENARIO_ISSUE,
     SHOPS,
     TRUCK_118,
@@ -88,7 +89,8 @@ async def count_bookings(session_factory: SessionFactory) -> int:
 
 
 async def add_ready_copy(session_factory: SessionFactory, issue: Issue) -> Issue:
-    copy = replace(issue, issue_id=uuid4())
+    # Another truck, because one truck can only be booked once a day.
+    copy = replace(issue, issue_id=uuid4(), truck_id=TRUCK_118.truck_id)
     await SqlAlchemyIssueRepository(session_factory).add(copy)
     return copy
 
@@ -114,7 +116,8 @@ async def test_shop_start_time_is_read_back_in_local_time(
     stored = await SqlAlchemyMaintenanceShopRepository(session_factory).list_all()
     rockdale = next(shop for shop in stored if shop.shop_id == ROCKDALE_JUNCTION.shop_id)
 
-    assert (rockdale.earliest_start.hour, rockdale.earliest_start.minute) == (15, 30)
+    assert rockdale.earliest_start.utcoffset() == ROCKDALE_JUNCTION.earliest_start.utcoffset()
+    assert rockdale.earliest_start.hour == ROCKDALE_JUNCTION.earliest_start.hour
 
 
 async def test_issue_round_trips_every_detail(session_factory: SessionFactory) -> None:
@@ -151,7 +154,7 @@ async def test_booking_is_stored_and_takes_a_bay(
     stored = await SqlAlchemyBookingRepository(session_factory).get(booking.booking_id)
     assert stored == booking
     assert stored is not None
-    assert stored.start_time.hour == 13
+    assert stored.start_time.hour == WOODRIDGE_FLEET.earliest_start.hour
     assert await open_bays(session_factory, WOODRIDGE_FLEET) == WOODRIDGE_FLEET.open_bays - 1
 
 
@@ -176,6 +179,57 @@ async def test_booked_issue_cannot_also_be_booked_at_another_shop(
 
     assert rejected.value.reason is BookingRejection.ISSUE_ALREADY_BOOKED
     assert await open_bays(session_factory, ROCKDALE_JUNCTION) == ROCKDALE_JUNCTION.open_bays
+
+
+async def test_truck_cannot_be_booked_twice_for_the_same_day_on_another_issue(
+    session_factory: SessionFactory, ready_issue: Issue
+) -> None:
+    first = await book(session_factory, ready_issue, WOODRIDGE_FLEET)
+    other_call = replace(ready_issue, issue_id=uuid4())
+    await SqlAlchemyIssueRepository(session_factory).add(other_call)
+
+    with pytest.raises(BookingRejectedError) as rejected:
+        await book(session_factory, other_call, ROCKDALE_JUNCTION)
+
+    assert rejected.value.reason is BookingRejection.TRUCK_ALREADY_BOOKED
+    assert await count_bookings(session_factory) == 1
+    assert await open_bays(session_factory, ROCKDALE_JUNCTION) == ROCKDALE_JUNCTION.open_bays
+    found = await SqlAlchemyBookingRepository(session_factory).get_for_truck(TRUCK_214.truck_id)
+    assert found == first
+
+
+async def test_booked_truck_cannot_be_booked_again_for_another_day(
+    session_factory: SessionFactory, ready_issue: Issue
+) -> None:
+    await book(session_factory, ready_issue, WOODRIDGE_FLEET)
+    other_call = replace(ready_issue, issue_id=uuid4(), needed_by=SCENARIO_DAY + timedelta(days=1))
+    await SqlAlchemyIssueRepository(session_factory).add(other_call)
+
+    with pytest.raises(BookingRejectedError) as rejected:
+        await book(session_factory, other_call, ROCKDALE_JUNCTION)
+
+    assert rejected.value.reason is BookingRejection.TRUCK_ALREADY_BOOKED
+    assert await count_bookings(session_factory) == 1
+    assert await open_bays(session_factory, ROCKDALE_JUNCTION) == ROCKDALE_JUNCTION.open_bays
+
+
+async def test_two_calls_racing_for_one_truck_get_one_booking(
+    session_factory: SessionFactory, ready_issue: Issue
+) -> None:
+    other_call = replace(ready_issue, issue_id=uuid4())
+    await SqlAlchemyIssueRepository(session_factory).add(other_call)
+
+    results = await asyncio.gather(
+        book(session_factory, ready_issue, WOODRIDGE_FLEET),
+        book(session_factory, other_call, ROCKDALE_JUNCTION),
+        return_exceptions=True,
+    )
+
+    assert sorted(type(result).__name__ for result in results) == [
+        "Booking",
+        "BookingRejectedError",
+    ]
+    assert await count_bookings(session_factory) == 1
 
 
 async def test_shop_with_no_open_bay_rejects_and_saves_nothing(

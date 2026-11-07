@@ -73,7 +73,6 @@ class Issue:
             "max_distance_miles": self.max_distance_miles,
             "max_budget": self.max_budget,
             "symptoms": self.symptoms,
-            "contact": self.contact,
         }
         if self.tow_required:
             details |= {"loaded": self.loaded, "hazmat": self.hazmat}

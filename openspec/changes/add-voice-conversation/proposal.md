@@ -11,7 +11,7 @@ The backend can triage an issue and quote vendors, but nobody can talk to it. Th
 - Add `POST /voice/calls/{issueId}/tools/{name}`, which runs the agent's tools against the application services.
 - Add a server-side lookup that turns a known spoken place into coordinates.
 - Require a prepared booking and a new dispatcher utterance before any booking is sent.
-- Show the live transcript, the issue's state, and the booking on screen, using tool results rather than the transcript.
+- Show the issue's state and the booking on screen, using tool results rather than the transcript.
 
 ## Capabilities
 

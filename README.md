@@ -24,7 +24,7 @@ Interactive API docs are at http://127.0.0.1:8001/docs.
 
 ## Run the frontend
 
-The dev server sends `/api` requests to the backend on port 8001. Opening the page creates an issue.
+The dev server sends `/api` requests to the backend on port 8001. The page lists booked repairs, newest first, and a new booking appears as soon as it's made. Issues without a booking aren't shown, but `GET /issues` still returns them.
 
 ```bash
 cd frontend && npm install && npm run dev
@@ -32,16 +32,10 @@ cd frontend && npm install && npm run dev
 
 ## Load the mock data
 
-This loads the fictional trucks, repair shops, and Truck 214 scenario. Run it again to reset between demos, or on a new day, because the scenario uses the date it was loaded. It deletes all bookings, trucks, shops, jobs, and any issue attached to a truck.
+This loads the fictional trucks, repair shops, and Truck 214 scenario. Run it just before a demo, because each shop's start time is set relative to the time it's loaded. Run it again between demos, since a truck can only be booked once a day. It deletes all bookings, trucks, shops, jobs, and any issue attached to a truck.
 
 ```bash
 uv run python -m issue_tracker.infrastructure.seed
-```
-
-To demo a shop failing, take away its open bays after the agent has offered it:
-
-```bash
-docker compose exec db psql -U issue_tracker -d issue_tracker -c "UPDATE maintenance_shops SET open_bays = 0 WHERE name LIKE 'Rockdale%';"
 ```
 
 ## Create an issue
@@ -67,13 +61,34 @@ Set `neededBy` to today or later. This request returns status `201` and asks for
 | `neededBy` | Yes | Today or later, in Central time |
 | `maxDistanceMiles`, `maxBudget` | Yes | |
 | `symptoms` | Yes | The driver's own words |
-| `contact` | Yes | `name` and `phone` |
+| `contact` | No | `name` and `phone` |
 | `loaded`, `hazmat` | Only if a tow is needed | A tow is needed if `drivable` is false or `problem` is `brake_failure` |
 | `odometerMiles`, `faultCodes` | No | `faultCodes` is a list of J1939 `spn` and `fmi` values |
 
 An unknown truck or an invalid value returns `422`, and nothing is saved. If the database is unavailable, the response has status `503`.
 
 The `Idempotency-Key` header is optional. Repeating a key returns status `200` with the original issue, and ignores the new body, so retries can't create duplicates.
+
+## Talk to the voice agent
+
+Add `OPENAI_API_KEY` to `.env`, load the mock data, and start the backend and frontend. Open the frontend in your own browser, select **Start call**, and allow the microphone. You'll need a working microphone, and the built-in browser in the Claude desktop app blocks microphones. The key stays on the server, and without it `POST /voice/calls` returns `503` while everything else keeps working.
+
+The agent only collects details and explains results. The backend decides prices, which shops qualify, and whether a booking is allowed:
+
+- **Read-back:** `book_repair` refuses with `read_back_required` until the agent has said the prepared shop, estimate, and start time and that audio has finished playing. When it finishes, the browser sends the transcript of what the agent said to `POST /voice/calls/<issueId>/read-backs`, which the model can't call. Speech that starts earlier doesn't count as a reply, and a read-back the dispatcher talks over doesn't count either.
+- **Confirmation:** `book_repair` then refuses with `confirmation_required` until the dispatcher's own reply to that read-back is a clear yes, such as "yes", "go ahead", or a short "okay". Anything with a negative word in it isn't. The browser sends that reply's transcript to `POST /voice/calls/<issueId>/answers`, which the model can't call either. The latest reply decides, and the booked price and time are the ones read back.
+- **Duplicates:** a booked truck can't be booked again, whatever the date. A retry, a second yes, or a new call gets the existing booking, marked `alreadyBooked`, and no bay is taken. Nothing releases a booking yet, so reload the mock data to book that truck again.
+- **Failures:** the **Failure switch**, under **Demo controls** on the page, makes one shop time out, return an error, or have no open bay, immediately and during a call. It clears when the backend restarts. A shop that gave no answer is listed in `unavailable`, not `excluded`.
+
+The **Tool call log** in the panel on the right shows each call's arguments, result or error, and duration.
+
+To run the tools without a call:
+
+```bash
+curl -i -X POST http://127.0.0.1:8001/voice/calls/<issueId>/tools/update_issue -H 'Content-Type: application/json' -d '{"place": "I-55 near Joliet"}'
+```
+
+The tools are `update_issue`, `search_shops`, `prepare_booking`, and `book_repair`. A failure the agent should explain, such as `no_open_bay` or `shop_timeout`, returns status `200` with an `error` field.
 
 ## Update and read an issue
 
@@ -93,7 +108,8 @@ Both return the same response as creating an issue, calculated from current data
 | --- | --- |
 | `needs_info` | `missingDetails` lists what to ask next |
 | `options_ready` | `options` lists vendors with `openBays`, `distanceMiles`, `earliestStart`, and an `estimate` with its `labor`, `parts`, and `tow` breakdown |
-| `no_vendor` | No vendor qualifies, and a person needs to step in |
+| `no_vendor` | Every shop answered and none qualifies, and a person needs to step in |
+| `shops_unavailable` | Voice search only: nothing can be offered and at least one shop, listed in `unavailable`, gave no answer, so it may still qualify |
 | `booked` | The issue has a booking |
 
 Vendors that aren't offered are in `excluded` with the first rule they failed, checked in this order: `job_not_offered`, `make_not_supported`, `no_tow_service`, `hazmat_not_supported`, `too_far`, `over_budget`, `no_open_bay`, `starts_too_late`.
@@ -118,6 +134,10 @@ uv run pytest
 
 ```bash
 uv run ruff check . && uv run mypy
+```
+
+```bash
+cd frontend && node --test src/*.test.js && npm run lint
 ```
 
 ## Architecture

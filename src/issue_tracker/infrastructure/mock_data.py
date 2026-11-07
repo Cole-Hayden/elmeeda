@@ -10,7 +10,7 @@ the agent has a real tradeoff to explain, whether or not the truck needs a tow:
 Labor hours, parts, and rates are chosen so each calculated estimate is a round number.
 """
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -20,11 +20,24 @@ from issue_tracker.domain.issue import Contact, Issue, ProblemType
 from issue_tracker.domain.job import Job, JobPart
 from issue_tracker.domain.location import Location
 from issue_tracker.domain.maintenance_shop import MaintenanceShop, TowService, VendorCapability
+from issue_tracker.domain.places import KnownPlace
 from issue_tracker.domain.truck import Truck
 
 CENTRAL = ZoneInfo("America/Chicago")
 # Today, so the scenario still works on whichever day the data is loaded.
 SCENARIO_DAY = central_today()
+
+
+def _opening_time() -> datetime:
+    """The next quarter hour, so every start is still ahead when the data is loaded. Capped so a
+    late load keeps all three starts today."""
+    now = datetime.now(CENTRAL)
+    next_quarter = now.replace(second=0, microsecond=0) + timedelta(minutes=15 - now.minute % 15)
+    latest = datetime.combine(SCENARIO_DAY, time(20, 0), CENTRAL)
+    return min(next_quarter, latest)
+
+
+OPENING_TIME = _opening_time()
 
 TRUCK_214 = Truck(
     truck_id=UUID("21400000-0000-4000-8000-000000000214"),
@@ -107,7 +120,7 @@ ROCKDALE_JUNCTION = MaintenanceShop(
     name="Rockdale Junction Truck Care",
     location=Location("Rockdale, IL", 41.5067, -88.1150),
     open_bays=1,
-    earliest_start=datetime.combine(SCENARIO_DAY, time(15, 30), CENTRAL),
+    earliest_start=OPENING_TIME + timedelta(hours=3, minutes=30),
     capabilities={
         COOLANT_LEAK_JOB.job_code: VendorCapability(Decimal("245.00")),
         TIRE_BLOWOUT_JOB.job_code: VendorCapability(Decimal("240.00")),
@@ -121,7 +134,7 @@ WOODRIDGE_FLEET = MaintenanceShop(
     name="Woodridge Fleet Service",
     location=Location("Woodridge, IL", 41.7470, -88.0500),
     open_bays=2,
-    earliest_start=datetime.combine(SCENARIO_DAY, time(13, 0), CENTRAL),
+    earliest_start=OPENING_TIME + timedelta(hours=1, minutes=30),
     capabilities={
         COOLANT_LEAK_JOB.job_code: VendorCapability(Decimal("180.00")),
         TIRE_BLOWOUT_JOB.job_code: VendorCapability(Decimal("180.00")),
@@ -138,7 +151,7 @@ MILLRACE_DIESEL = MaintenanceShop(
     name="Millrace Diesel Works",
     location=Location("Wilmington, IL", 41.3078, -88.1467),
     open_bays=3,
-    earliest_start=datetime.combine(SCENARIO_DAY, time(11, 30), CENTRAL),
+    earliest_start=OPENING_TIME + timedelta(minutes=30),
     capabilities={
         COOLANT_LEAK_JOB.job_code: VendorCapability(Decimal("310.00"), MILLRACE_MAKES),
         BRAKE_FAILURE_JOB.job_code: VendorCapability(Decimal("235.00"), MILLRACE_MAKES),
@@ -148,6 +161,14 @@ MILLRACE_DIESEL = MaintenanceShop(
 )
 
 SHOPS = (ROCKDALE_JUNCTION, WOODRIDGE_FLEET, MILLRACE_DIESEL)
+
+# Places a dispatcher might name, standing in for real geocoding.
+KNOWN_PLACES = (
+    KnownPlace(Location("I-55 near Joliet, IL", 41.4900, -88.1950), ("joliet",)),
+    KnownPlace(Location("Rockdale, IL", 41.5067, -88.1150), ("rockdale",)),
+    KnownPlace(Location("Woodridge, IL", 41.7470, -88.0500), ("woodridge",)),
+    KnownPlace(Location("Wilmington, IL", 41.3078, -88.1467), ("wilmington",)),
+)
 
 # The dispatcher's opening request. It doesn't say whether the truck can be driven,
 # so that is what the agent should ask.

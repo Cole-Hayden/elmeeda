@@ -114,6 +114,20 @@ class SqlAlchemyIssueRepository:
             raise StorageUnavailableError from exc
         return issue_from_model(model) if model else None
 
+    async def list_recent(self, limit: int) -> list[Issue]:
+        statement = (
+            select(IssueModel)
+            # The ID breaks ties so the order is stable between reads.
+            .order_by(IssueModel.created_at.desc(), IssueModel.issue_id)
+            .limit(limit)
+        )
+        try:
+            async with self._session_factory() as session:
+                models = await session.scalars(statement)
+                return [issue_from_model(model) for model in models]
+        except (SQLAlchemyError, OSError) as exc:
+            raise StorageUnavailableError from exc
+
     async def save(self, issue: Issue) -> None:
         try:
             async with self._session_factory.begin() as session:

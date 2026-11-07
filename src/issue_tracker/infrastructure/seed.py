@@ -13,10 +13,12 @@ from issue_tracker.config import Settings
 from issue_tracker.infrastructure.issue_repository import issue_to_model
 from issue_tracker.infrastructure.mock_data import JOBS, SCENARIO_ISSUE, SHOPS, TRUCKS
 from issue_tracker.infrastructure.models import (
+    BookingConfirmationModel,
     BookingModel,
     IssueModel,
     JobModel,
     JobPartModel,
+    LimitChangeConfirmationModel,
     MaintenanceShopModel,
     TruckModel,
     VendorCapabilityModel,
@@ -25,6 +27,8 @@ from issue_tracker.infrastructure.models import (
 
 async def reset_mock_data(session_factory: async_sessionmaker[AsyncSession]) -> None:
     async with session_factory.begin() as session:
+        await session.execute(delete(BookingConfirmationModel))
+        await session.execute(delete(LimitChangeConfirmationModel))
         await session.execute(delete(BookingModel))
         await session.execute(delete(IssueModel).where(IssueModel.truck_id.is_not(None)))
         await session.execute(delete(VendorCapabilityModel))

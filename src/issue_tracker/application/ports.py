@@ -4,6 +4,7 @@ from typing import Protocol
 from uuid import UUID
 
 from issue_tracker.domain.booking import Booking
+from issue_tracker.domain.confirmation import PendingLimitChange, PreparedBooking
 from issue_tracker.domain.issue import Issue, ProblemType
 from issue_tracker.domain.job import Job
 from issue_tracker.domain.maintenance_shop import MaintenanceShop
@@ -30,6 +31,7 @@ class BookingRejection(StrEnum):
     JOB_NOT_OFFERED = "job_not_offered"
     NO_OPEN_BAY = "no_open_bay"
     QUOTE_CHANGED = "quote_changed"
+    TRUCK_ALREADY_BOOKED = "truck_already_booked"
 
 
 class BookingRejectedError(Exception):
@@ -54,6 +56,10 @@ class IssueRepository(Protocol):
 
     async def get_by_key(self, idempotency_key: str) -> Issue | None:
         """Return the issue created with this key, or raise StorageUnavailableError."""
+        ...
+
+    async def list_recent(self, limit: int) -> list[Issue]:
+        """Return the newest issues first, or raise StorageUnavailableError."""
         ...
 
     async def save(self, issue: Issue) -> None:
@@ -111,4 +117,51 @@ class BookingRepository(Protocol):
 
     async def get_for_issue(self, issue_id: UUID) -> Booking | None:
         """Return the issue's booking if it has one, or raise StorageUnavailableError."""
+        ...
+
+    async def get_for_truck(self, truck_id: UUID) -> Booking | None:
+        """Return the truck's booking if it has one, or raise StorageUnavailableError."""
+        ...
+
+
+class ConfirmationRepository(Protocol):
+    async def prepare(self, prepared: PreparedBooking) -> None:
+        """Replace the issue's prepared booking, unconfirmed, or raise StorageUnavailableError."""
+        ...
+
+    async def get(self, issue_id: UUID) -> PreparedBooking | None:
+        """Return the issue's prepared booking, or raise StorageUnavailableError."""
+        ...
+
+    async def mark_read_back(self, issue_id: UUID, confirmation_id: UUID) -> None:
+        """Note that the agent said that prepared booking's details, if it's still the current
+        one, or raise StorageUnavailableError."""
+        ...
+
+    async def record_answer(self, issue_id: UUID, confirmation_id: UUID, confirmed: bool) -> bool:
+        """Set whether that prepared booking is confirmed, returning False if it's no longer the
+        current one. Raises StorageUnavailableError."""
+        ...
+
+    async def clear(self, issue_id: UUID) -> None:
+        """Forget the issue's prepared booking, or raise StorageUnavailableError."""
+        ...
+
+
+class LimitChangeRepository(Protocol):
+    async def prepare(self, pending: PendingLimitChange) -> None:
+        """Replace the issue's pending change, unconfirmed, or raise StorageUnavailableError."""
+        ...
+
+    async def get(self, issue_id: UUID) -> PendingLimitChange | None:
+        """Return the issue's pending change, or raise StorageUnavailableError."""
+        ...
+
+    async def record_answer(self, issue_id: UUID, confirmation_id: UUID, confirmed: bool) -> bool:
+        """Set whether that pending change is confirmed, returning False if it's no longer the
+        current one. Raises StorageUnavailableError."""
+        ...
+
+    async def clear(self, issue_id: UUID) -> None:
+        """Forget the issue's pending change, or raise StorageUnavailableError."""
         ...

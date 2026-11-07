@@ -60,6 +60,9 @@ class IssueModel(Base):
         JSONB, default=list, server_default=text("'[]'::jsonb")
     )
     idempotency_key: Mapped[str | None] = mapped_column(String(255), unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
 
 
 class JobModel(Base):
@@ -145,3 +148,30 @@ class BookingModel(Base):
     shop_id: Mapped[UUID] = mapped_column(ForeignKey("maintenance_shops.shop_id"))
     estimate: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class BookingConfirmationModel(Base):
+    """What the dispatcher was last asked to confirm, and whether they said yes."""
+
+    __tablename__ = "booking_confirmations"
+
+    issue_id: Mapped[UUID] = mapped_column(ForeignKey("issues.issue_id"), primary_key=True)
+    confirmation_id: Mapped[UUID]
+    shop_id: Mapped[UUID] = mapped_column(ForeignKey("maintenance_shops.shop_id"))
+    estimate: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    confirmed: Mapped[bool]
+    read_back: Mapped[bool] = mapped_column(server_default=text("false"))
+
+
+class LimitChangeConfirmationModel(Base):
+    """A loosened limit the dispatcher was asked to confirm, and whether they said yes."""
+
+    __tablename__ = "limit_change_confirmations"
+
+    issue_id: Mapped[UUID] = mapped_column(ForeignKey("issues.issue_id"), primary_key=True)
+    confirmation_id: Mapped[UUID]
+    max_distance_miles: Mapped[float | None]
+    needed_by: Mapped[date | None]
+    max_budget: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    confirmed: Mapped[bool]

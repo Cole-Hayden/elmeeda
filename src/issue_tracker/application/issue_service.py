@@ -9,6 +9,9 @@ from issue_tracker.application.ports import IssueNotFoundError, IssueRepository,
 from issue_tracker.domain.issue import Contact, FaultCode, Issue, ProblemType
 from issue_tracker.domain.location import Location
 
+# Each listed issue is triaged live, so the list is capped to keep that cost bounded.
+ISSUE_LIST_LIMIT = 50
+
 
 class UnknownTruckError(Exception):
     """No truck has the unit number the client gave, so nothing was saved."""
@@ -96,6 +99,9 @@ class IssueService:
         if issue is None:
             raise IssueNotFoundError
         return issue
+
+    async def list_recent_issues(self) -> list[Issue]:
+        return await self._repository.list_recent(ISSUE_LIST_LIMIT)
 
     async def update_issue(self, issue_id: UUID, details: IssueDetails) -> Issue:
         truck_id = await self._validate(details)
