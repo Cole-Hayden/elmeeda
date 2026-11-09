@@ -42,9 +42,6 @@ class FakeIssueRepository:
     async def get_by_key(self, idempotency_key: str) -> Issue | None:
         return self.keys.get(idempotency_key)
 
-    async def list_recent(self, limit: int) -> list[Issue]:
-        return self.saved[::-1][:limit]
-
     async def save(self, issue: Issue) -> None:
         self.saved.append(issue)
 

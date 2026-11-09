@@ -58,10 +58,6 @@ class IssueRepository(Protocol):
         """Return the issue created with this key, or raise StorageUnavailableError."""
         ...
 
-    async def list_recent(self, limit: int) -> list[Issue]:
-        """Return the newest issues first, or raise StorageUnavailableError."""
-        ...
-
     async def save(self, issue: Issue) -> None:
         """Durably save the issue's latest details, or raise StorageUnavailableError."""
         ...

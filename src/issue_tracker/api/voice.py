@@ -8,12 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, ValidationError
 
-from issue_tracker.api.issues import (
-    IssueRequest,
-    get_issue_service,
-    issue_not_found,
-    triage_response,
-)
+from issue_tracker.api.dependencies import get_issue_service, issue_not_found
+from issue_tracker.api.schemas import IssueRequest, triage_response
 from issue_tracker.application.booking_service import BookingService
 from issue_tracker.application.issue_service import (
     IssueService,

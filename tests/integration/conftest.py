@@ -64,7 +64,7 @@ StartCall = Callable[[], Awaitable[str]]
 
 @pytest.fixture
 async def client(test_database_url: str) -> AsyncIterator[AsyncClient]:
-    app = create_app(Settings(database_url=test_database_url))
+    app = create_app(Settings(database_url=test_database_url, enable_dev_api=True))
     app.state.realtime_gateway = AnsweringGateway()
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)

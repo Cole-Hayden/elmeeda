@@ -11,3 +11,5 @@ class Settings(BaseSettings):
     openai_realtime_model: str = "gpt-realtime-2.1"
     shop_timeout_seconds: float = 2.0
     openai_realtime_voice: str = "marin"
+    # Mounts the hidden /issues routes for tests and scripts/check_requirements.py.
+    enable_dev_api: bool = False

@@ -52,6 +52,7 @@ def create_app(
         else None
     )
     app.add_exception_handler(StorageUnavailableError, handle_storage_unavailable)
-    app.include_router(issues_router)
+    if resolved_settings.enable_dev_api:
+        app.include_router(issues_router)
     app.include_router(voice_router)
     return app

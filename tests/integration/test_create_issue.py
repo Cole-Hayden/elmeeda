@@ -1,5 +1,6 @@
 from uuid import UUID, uuid4
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -62,7 +63,7 @@ async def test_client_supplied_issue_id_is_ignored(
 
 async def test_unreachable_database_returns_generic_503() -> None:
     unreachable_url = "postgresql+asyncpg://secret-user:secret-pass@127.0.0.1:1/secret-db"
-    app = create_app(Settings(database_url=unreachable_url))
+    app = create_app(Settings(database_url=unreachable_url, enable_dev_api=True))
 
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
@@ -71,3 +72,17 @@ async def test_unreachable_database_returns_generic_503() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "The service is temporarily unavailable."}
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_issue_routes_are_dev_only_and_hidden(test_database_url: str, enabled: bool) -> None:
+    app = create_app(Settings(database_url=test_database_url, enable_dev_api=enabled))
+
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            created = await client.post("/issues")
+            schema = (await client.get("/openapi.json")).json()
+
+    assert created.status_code == (201 if enabled else 404)
+    assert not any(path.startswith("/issues") for path in schema["paths"])

@@ -370,97 +370,58 @@ async def test_booked_issue_reports_booked_with_no_options(
     assert response.json()["excluded"] == []
 
 
-async def test_patch_fills_in_details_until_options_are_ready(
-    client: AsyncClient, session_factory: SessionFactory
-) -> None:
-    response = await client.post(
-        "/issues", json={"truckUnitNumber": "214", "problem": "coolant_leak"}
-    )
-    url = f"/issues/{response.json()['issueId']}"
-
-    remaining = {key: value for key, value in request().items() if key != "truckUnitNumber"}
-    for field, value in remaining.items():
-        response = await client.patch(url, json={field: value})
-        assert response.status_code == 200
-
-    assert response.json()["status"] == "options_ready"
-    assert response.json()["missingDetails"] == []
-    assert estimates(response.json()) == {WOODRIDGE: "1120.00", ROCKDALE: "1380.00"}
+async def update_by_voice(client: AsyncClient, issue_id: str, **fields: Any) -> dict[str, Any]:
+    """Change an issue the only way a running system can: the voice agent's update_issue tool."""
+    response = await client.post(f"/voice/calls/{issue_id}/tools/update_issue", json=fields)
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
 
 
-async def test_patch_changes_only_what_was_sent(
+async def test_update_changes_only_what_was_sent(
     client: AsyncClient, session_factory: SessionFactory
 ) -> None:
     created = await create(client)
 
-    response = await client.patch(
-        f"/issues/{created['issueId']}", json={"symptoms": "Now also steaming."}
-    )
+    result = await update_by_voice(client, created["issueId"], symptoms="Now also steaming.")
 
-    assert response.json()["details"] == {**created["details"], "symptoms": "Now also steaming."}
+    assert result["details"] == {**created["details"], "symptoms": "Now also steaming."}
 
 
 @pytest.mark.parametrize("field", ["symptoms", "drivable", "contact"])
-async def test_patch_with_null_leaves_the_detail_unchanged(
+async def test_update_with_null_leaves_the_detail_unchanged(
     client: AsyncClient, session_factory: SessionFactory, field: str
 ) -> None:
     created = await create(client)
 
-    response = await client.patch(f"/issues/{created['issueId']}", json={field: None})
+    result = await update_by_voice(client, created["issueId"], **{field: None})
 
-    assert response.status_code == 200
-    assert response.json()["details"] == created["details"]
+    assert "error" not in result
+    assert result["details"] == created["details"]
 
 
-async def test_patch_that_requires_a_tow_asks_for_tow_details_and_reprices(
+async def test_update_that_requires_a_tow_asks_for_tow_details_and_reprices(
     client: AsyncClient, session_factory: SessionFactory
 ) -> None:
     created = await create(client)
-    url = f"/issues/{created['issueId']}"
 
-    asked = await client.patch(url, json={"drivable": False})
-    answered = await client.patch(url, json={"loaded": False, "hazmat": False})
+    asked = await update_by_voice(client, created["issueId"], drivable=False)
+    await update_by_voice(client, created["issueId"], loaded=False, hazmat=False)
+    search = await client.post(f"/voice/calls/{created['issueId']}/tools/search_shops", json={})
 
-    assert asked.json()["status"] == "needs_info"
-    assert asked.json()["missingDetails"] == ["loaded", "hazmat"]
-    assert estimates(answered.json())[WOODRIDGE] == "1257.09"
-
-
-@pytest.mark.parametrize(
-    "invalid",
-    [
-        {"truckUnitNumber": "999"},
-        {"problem": "flux_capacitor"},
-        {"maxBudget": "-1.00"},
-        {"neededBy": "2000-01-01"},
-    ],
-)
-async def test_invalid_patch_returns_422_and_changes_nothing(
-    client: AsyncClient, session_factory: SessionFactory, invalid: dict[str, Any]
-) -> None:
-    created = await create(client)
-    url = f"/issues/{created['issueId']}"
-
-    response = await client.patch(url, json=invalid)
-
-    assert response.status_code == 422
-    assert (await client.get(url)).json() == created
+    assert asked["status"] == "needs_info"
+    assert asked["missingDetails"] == ["loaded", "hazmat"]
+    assert estimates(search.json())[WOODRIDGE] == "1257.09"
 
 
-async def test_patch_unknown_issue_returns_404(client: AsyncClient) -> None:
-    response = await client.patch(f"/issues/{uuid4()}", json={"drivable": True})
-
-    assert response.status_code == 404
-
-
-async def test_patch_booked_issue_returns_409_and_changes_nothing(
+async def test_issues_cannot_be_changed_or_listed_over_http(
     client: AsyncClient, session_factory: SessionFactory
 ) -> None:
     created = await create(client)
-    await book_woodridge(session_factory, created)
-    url = f"/issues/{created['issueId']}"
 
-    response = await client.patch(url, json={"drivable": False})
+    patched = await client.patch(f"/issues/{created['issueId']}", json={"maxBudget": 9000})
+    listed = await client.get("/issues")
 
-    assert response.status_code == 409
-    assert (await client.get(url)).json()["details"] == created["details"]
+    assert patched.status_code == 405
+    assert listed.status_code in (404, 405)
+    assert (await client.get(f"/issues/{created['issueId']}")).json() == created
