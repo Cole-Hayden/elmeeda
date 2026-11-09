@@ -95,6 +95,12 @@ curl -i -X POST http://127.0.0.1:8001/voice/calls/<issueId>/tools/update_issue -
 
 The tools are `update_issue`, `search_shops`, `prepare_booking`, and `book_repair`. A failure the agent should explain, such as `no_open_bay` or `shop_timeout`, returns status `200` with an `error` field.
 
+## Stretch goals
+
+- **Change of mind:** when the dispatcher changes one constraint, such as the budget or the distance, `update_issue` saves only that field and keeps the rest, and the next search uses it. A tighter limit applies straight away. A looser one waits for the dispatcher's yes, so the agent can't relax a limit on its own. Run 6 of the [voice test script](scripts/voice_test_script.md) checks this on a call.
+- **Interruptions:** the dispatcher can cut the agent off at any point, including while a tool call is running. A cut-off reply stops at once and its tool calls never run. A tool that's already running finishes once, and its result still reaches the agent and the tool call log. A read-back the dispatcher talks over doesn't count, so a "yes" said over it books nothing. Replies are sent to the backend in order, so the latest one decides. Run 7 of the [voice test script](scripts/voice_test_script.md) checks each of these on a call.
+- **Feature of choice: a callback finds the existing booking.** If anyone calls back about a truck that's already booked, on any day, the agent reads back that booking instead of offering shops, because a dispatcher who calls twice, or two dispatchers working the same breakdown, shouldn't send one truck to two shops.
+
 ## Test
 
 Postgres must be running. Integration tests recreate a separate `issue_tracker_test` database each run, so your development data isn't touched. The confirmation gate and duplicate protection tests are in `tests/integration/test_voice_tools.py` and `tests/integration/test_booking_storage.py`.

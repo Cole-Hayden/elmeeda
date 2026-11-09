@@ -79,12 +79,31 @@ Reload the mock data first.
 | 2 | Repeat steps 1 to 3 of Run 1. | `search_shops` returns `shops_unavailable`. The agent says the shops didn't respond, doesn't say that no shop qualifies, doesn't suggest raising the budget or distance, and offers to search again or hand over to a person. |
 | 3 | Set every shop back to **Working normally**, and say "Try again." | The options come back. |
 
-## Run 6: Raising a limit needs a yes
+## Run 6: Change of mind
 
-Reload the mock data first.
+Covers the change-of-mind stretch goal. Reload the mock data first.
 
 | # | You say | Check |
 |---|---|---|
 | 1 | Repeat steps 1 to 3 of Run 1. | |
-| 2 | "Actually, the budget can go to $2,000." | The `update_issue` result has `limitChangeNeedsYes`. The agent reads the new budget back and asks for a yes. |
-| 3 | "Yes." | The agent calls `update_issue` again, and the next search can include Millrace. |
+| 2 | "Actually, the budget can go to $2,000." | The `update_issue` call sends only `maxBudget`. Its result has `limitChangeNeedsYes`. The agent reads the new budget back and asks for a yes. |
+| 3 | "Yes." | The agent calls `update_issue` again and searches again. Millrace Diesel is now offered. The location, date, and 30-mile limit are unchanged in the result's `details`, and the agent doesn't ask for them. |
+| 4 | "Keep it within 10 miles." | No yes is needed, because the limit is tighter. The next search offers only Rockdale. Woodridge and Millrace are crossed out as too far, and the budget is still $2,000. |
+
+## Run 7: Interruptions
+
+Checks the interruptions stretch goal, including cutting the agent off while a tool call is running. Reload the mock data first.
+
+In **Demo controls**, set **Millrace Diesel** to **Time out** before you start. Millrace is over budget anyway, so the options don't change, but every search now takes about 2 seconds. That gives you time to talk while `search_shops` shows **running…** in the log.
+
+| # | You do | Check |
+|---|---|---|
+| 1 | Give the opening request from Run 1. While the agent is asking whether the truck can be driven, cut in with "It's drivable." | The agent's audio stops straight away. It doesn't finish or repeat the question. `update_issue` with `drivable: true` appears in the log. |
+| 2 | Watch the log. While `search_shops` says **running…**, say "Which one is closest?" | No red error appears under the call controls. `search_shops` finishes with **ok**, appears once, and doesn't get stuck on **running…**. The agent answers with Rockdale, using the search result. It doesn't invent a distance before the result arrives. |
+| 3 | While the agent is comparing the options, cut in with "Stop. Just book Woodridge." | The agent stops, calls `prepare_booking` for Woodridge, and starts the read-back. |
+| 4 | Halfway through the read-back, say "Yes." | Nothing is booked. The early yes doesn't count, so any `book_repair` returns `read_back_required`, and the agent reads the details back again. |
+| 5 | Let the read-back finish, then say "Yes, go ahead." | `book_repair` returns **ok** once. |
+| 6 | While the agent is reading out the booking ID, cut in with "Sorry, what was the booking ID?" | The agent repeats the same booking ID. The bookings list still shows one booking, and Woodridge has lost only one bay. |
+| 7 | Set Millrace back to **Working normally**. | |
+
+The run passes if every step's check holds, no red error appears, and no log entry is left on **running…**. If step 2 shows an error such as an active response already being in progress, the browser asked for a new reply while the dispatcher's speech had already started one. Note what you saw and tell Claude, because that would need a fix in `useRealtimeCall.js`.
