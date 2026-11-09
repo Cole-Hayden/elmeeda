@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
@@ -32,6 +33,7 @@ OPENING_REQUEST = {
     "maxDistanceMiles": 30,
     "maxBudget": 1500,
 }
+StartCall = Callable[[], Awaitable[str]]
 
 
 async def tool(client: AsyncClient, issue_id: str, name: str, **arguments: Any) -> dict[str, Any]:
@@ -42,10 +44,8 @@ async def tool(client: AsyncClient, issue_id: str, name: str, **arguments: Any) 
 
 
 @pytest.fixture
-async def issue_id(client: AsyncClient, session_factory: SessionFactory) -> str:
-    response = await client.post("/issues")
-    issue: str = response.json()["issueId"]
-    return issue
+async def issue_id(session_factory: SessionFactory, start_call: StartCall) -> str:
+    return await start_call()
 
 
 @pytest.fixture
@@ -462,10 +462,10 @@ async def test_no_booked_repairs_are_listed_before_a_booking(
 
 
 async def test_booked_repair_is_listed_with_its_details(
-    client: AsyncClient, ready_issue_id: str
+    client: AsyncClient, ready_issue_id: str, start_call: StartCall
 ) -> None:
     booked = await confirmed_booking(client, ready_issue_id, WOODRIDGE)
-    await client.post("/issues")
+    await start_call()
 
     response = await client.get("/voice/bookings")
 
@@ -501,10 +501,10 @@ async def test_second_yes_returns_the_same_booking(
 
 
 async def test_a_new_call_for_the_same_truck_finds_the_booking(
-    client: AsyncClient, session_factory: SessionFactory, ready_issue_id: str
+    client: AsyncClient, session_factory: SessionFactory, ready_issue_id: str, start_call: StartCall
 ) -> None:
     first = await confirmed_booking(client, ready_issue_id, WOODRIDGE)
-    new_call = (await client.post("/issues")).json()["issueId"]
+    new_call = await start_call()
     await tool(client, new_call, "update_issue", **OPENING_REQUEST, drivable=True)
 
     search = await tool(client, new_call, "search_shops")
@@ -521,10 +521,10 @@ async def test_a_new_call_for_the_same_truck_finds_the_booking(
 
 
 async def test_a_new_call_for_another_day_finds_the_booking(
-    client: AsyncClient, session_factory: SessionFactory, ready_issue_id: str
+    client: AsyncClient, session_factory: SessionFactory, ready_issue_id: str, start_call: StartCall
 ) -> None:
     first = await confirmed_booking(client, ready_issue_id, WOODRIDGE)
-    new_call = (await client.post("/issues")).json()["issueId"]
+    new_call = await start_call()
     tomorrow = (SCENARIO_DAY + timedelta(days=1)).isoformat()
     await tool(
         client,

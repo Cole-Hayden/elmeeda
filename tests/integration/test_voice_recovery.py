@@ -1,5 +1,6 @@
 """Recovering from a shop failure without the model loosening what the dispatcher asked for."""
 
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
@@ -14,6 +15,7 @@ ROCKDALE = "Rockdale Junction Truck Care"
 WOODRIDGE = "Woodridge Fleet Service"
 MILLRACE = "Millrace Diesel Works"
 ALL_SHOPS = (ROCKDALE, WOODRIDGE, MILLRACE)
+StartCall = Callable[[], Awaitable[str]]
 
 
 async def tool(client: AsyncClient, issue_id: str, name: str, **arguments: Any) -> dict[str, Any]:
@@ -40,9 +42,13 @@ async def set_fault(client: AsyncClient, name: str, fault: str) -> None:
 
 
 @pytest.fixture
-async def issue_id(client: AsyncClient, session_factory: async_sessionmaker[AsyncSession]) -> str:
+async def issue_id(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    start_call: StartCall,
+) -> str:
     """Truck 214 with a $1,500 budget, a 30 mile limit, and every other detail said."""
-    created: str = (await client.post("/issues")).json()["issueId"]
+    created = await start_call()
     await tool(
         client,
         created,
@@ -170,8 +176,10 @@ async def test_tightening_a_limit_needs_no_yes(client: AsyncClient, issue_id: st
     assert result["details"]["maxDistanceMiles"] == 10
 
 
-async def test_setting_a_limit_for_the_first_time_needs_no_yes(client: AsyncClient) -> None:
-    created = (await client.post("/issues")).json()["issueId"]
+async def test_setting_a_limit_for_the_first_time_needs_no_yes(
+    client: AsyncClient, start_call: StartCall
+) -> None:
+    created = await start_call()
 
     result = await tool(client, created, "update_issue", maxBudget=9000)
 
