@@ -12,6 +12,7 @@ The backend can triage an issue and quote vendors, but nobody can talk to it. Th
 - Add a server-side lookup that turns a known spoken place into coordinates.
 - Require a prepared booking and a new dispatcher utterance before any booking is sent.
 - Show the issue's state and the booking on screen, using tool results rather than the transcript.
+- Stretch goals: change one constraint while keeping the rest, stay consistent when interrupted, and name the callback that finds an existing booking as the chosen feature.
 
 ## Capabilities
 

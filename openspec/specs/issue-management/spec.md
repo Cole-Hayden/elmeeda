@@ -6,20 +6,29 @@ Lets API clients create issues and relies on durable storage to keep them. An is
 ## Requirements
 
 ### Requirement: Create an issue
-The system SHALL expose `POST /issues`, which needs no request body, creates one issue, and responds with status 201 and a JSON object containing the issue's `issueId`.
+When the `ENABLE_DEV_API` setting is on, the system SHALL expose `POST /issues`, which needs no request body, creates one issue, and responds with status 201 and the issue's triage result, including its `issueId`. When the setting is off, `POST /issues` SHALL return 404. The route SHALL NOT appear in the API docs.
 
 #### Scenario: Issue is created
-- **WHEN** a client sends `POST /issues` with no request body
+- **WHEN** the dev routes are on and a client sends `POST /issues` with no request body
 - **THEN** the response status is 201
-- **AND** the response body is a JSON object whose only field is `issueId`, holding a UUID
+- **AND** the response body contains a UUID `issueId`
+- **AND** the response body has `status` set to `needs_info`
+
+#### Scenario: Dev routes are off
+- **WHEN** `ENABLE_DEV_API` is off and a client sends `POST /issues`
+- **THEN** the response status is 404
+- **AND** no issue is stored
+
+#### Scenario: API docs are read
+- **WHEN** a client reads `/openapi.json`, whether or not the dev routes are on
+- **THEN** no `/issues` path is listed
 
 ### Requirement: Create an issue with breakdown details
-`POST /issues` SHALL accept an optional JSON body with any of `truckUnitNumber`, `problem`, `location` (`description`, `latitude`, `longitude`), `drivable`, `neededBy`, `maxDistanceMiles`, and `maxBudget`, and SHALL store every detail it receives with the issue.
+`POST /issues` SHALL accept an optional JSON body with any of `truckUnitNumber`, `problem`, `location` (`description`, `latitude`, `longitude`), `drivable`, `neededBy`, `maxDistanceMiles`, `maxBudget`, `symptoms`, `contact` (`name`, `phone`), `loaded`, `hazmat`, `odometerMiles`, and `faultCodes` (a list of `spn` and `fmi`), and SHALL store every detail it receives with the issue.
 
 #### Scenario: Details are stored
 - **WHEN** a client sends `POST /issues` with valid details
 - **THEN** the response status is 201
-- **AND** the response body is a JSON object whose only field is `issueId`
 - **AND** the stored issue holds those details
 
 #### Scenario: Only some details are known
@@ -33,7 +42,12 @@ The system SHALL expose `POST /issues`, which needs no request body, creates one
 - **AND** no issue is stored
 
 #### Scenario: Details are invalid
-- **WHEN** a client sends a detail that fails validation, such as an unknown `problem` or a negative `maxBudget`
+- **WHEN** a client sends a detail that fails validation, such as an unlisted `problem`, a negative `maxBudget`, a negative `odometerMiles`, or an `fmi` above 31
+- **THEN** the response status is 422
+- **AND** no issue is stored
+
+#### Scenario: Needed-by date has passed
+- **WHEN** a client sends a `neededBy` date earlier than today in Central time
 - **THEN** the response status is 422
 - **AND** no issue is stored
 
@@ -63,3 +77,33 @@ The system SHALL respond with status 503 when the issue cannot be saved because 
 - **WHEN** a client sends `POST /issues` while the database cannot be reached
 - **THEN** the response status is 503
 - **AND** the response body contains a generic error message without connection details
+
+### Requirement: Creating an issue can be retried safely
+`POST /issues` SHALL accept an optional `Idempotency-Key` header. Requests with the same key SHALL refer to one issue.
+
+#### Scenario: Request is retried with the same key
+- **WHEN** a client sends `POST /issues` twice with the same `Idempotency-Key`
+- **THEN** the first response status is 201
+- **AND** the second response status is 200 with the same `issueId`
+- **AND** the database contains one issue for that key
+
+#### Scenario: Requests run concurrently with the same key
+- **WHEN** two `POST /issues` requests with the same `Idempotency-Key` run at the same time
+- **THEN** both responses contain the same `issueId`
+- **AND** the database contains one issue for that key
+
+#### Scenario: Retry has a different body
+- **WHEN** a client repeats an `Idempotency-Key` with a different body
+- **THEN** the response status is 200 with the original issue's details
+
+### Requirement: Read an issue
+When the `ENABLE_DEV_API` setting is on, the system SHALL expose `GET /issues/{issueId}`, which responds with the issue's current triage result. When the setting is off, it SHALL return 404.
+
+#### Scenario: Issue exists
+- **WHEN** the dev routes are on and a client sends `GET /issues/{issueId}` for an existing issue
+- **THEN** the response status is 200
+- **AND** the response body contains the issue's stored details and current triage result
+
+#### Scenario: Issue does not exist
+- **WHEN** a client sends `GET /issues/{issueId}` for an unknown ID
+- **THEN** the response status is 404

@@ -38,5 +38,11 @@
 ## 6. Verification
 
 - [x] 6.1 Run the Truck 214 scenario by voice, from request to booking, and verify the booking with `psql`
-- [ ] 6.2 Run the shop failure scenario with the failure switch during a call, and verify the agent reports the failure and moves on truthfully
+- [x] 6.2 Run the shop failure scenario with the failure switch during a call, and verify the agent reports the failure and moves on truthfully
 - [x] 6.3 Update `README.md`, and verify `pytest`, `ruff check`, `mypy`, `npm run lint`, and `openspec validate add-voice-conversation --strict` pass
+
+## 7. Stretch goals
+
+- [x] 7.1 Change one limit by voice while keeping every other detail, and verify with integration tests that `update_issue` changes only the fields it was sent
+- [x] 7.2 Name the callback that finds an existing booking as the chosen feature, with a sentence on why, in `README.md`
+- [x] 7.3 Run Run 7 of `scripts/voice_test_script.md` on a live call, cutting the agent off mid-sentence, during a running tool call, and during the read-back, and verify every interruption scenario in the spec

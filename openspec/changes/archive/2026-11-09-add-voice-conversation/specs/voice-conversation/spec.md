@@ -224,3 +224,38 @@ The screen SHALL show the booking ID, shop, estimate, and start time from the bo
 #### Scenario: Transcript mentions a booking
 - **WHEN** the agent says a booking was made and no booking tool result exists
 - **THEN** the screen shows no booking
+
+### Requirement: Change one constraint and keep the rest
+When the dispatcher changes one constraint, such as the budget or the distance, `update_issue` SHALL change only the details it was sent, and the next search SHALL use the new value with every other detail unchanged. A tighter limit SHALL apply immediately, and a looser one SHALL follow "Loosen a limit only after the dispatcher confirms".
+
+#### Scenario: Dispatcher tightens the distance
+- **WHEN** the model calls `update_issue` with only a lower `maxDistanceMiles`
+- **THEN** the new distance is saved without a read-back, the location, date, budget, and other details are unchanged, and the next search excludes shops beyond it as `too_far`
+
+#### Scenario: Detail sent as null
+- **WHEN** the model calls `update_issue` with a detail set to null
+- **THEN** that detail keeps its saved value
+
+#### Scenario: Agent is asked to repeat a constraint
+- **WHEN** the dispatcher changes one constraint
+- **THEN** the agent doesn't ask again for the details already given
+
+### Requirement: Stay consistent when interrupted
+The dispatcher SHALL be able to cut the agent off at any point, including while a tool call is running, without a tool running twice, a result being lost, or a booking being made without a yes.
+
+#### Scenario: Dispatcher cuts the agent off mid-sentence
+- **WHEN** the dispatcher starts speaking while the agent is talking
+- **THEN** the agent's audio stops, and any tool call in the unfinished response isn't run
+
+#### Scenario: Dispatcher speaks while a tool call is running
+- **WHEN** the dispatcher speaks while a tool call is still running
+- **THEN** the call finishes once, its result reaches the model and appears in the tool call log, and no error is shown to the dispatcher
+
+#### Scenario: Read-back is cut off
+- **WHEN** the dispatcher talks over the read-back, including with a yes
+- **THEN** the read-back doesn't count, nothing is booked, and the agent reads the details back again
+
+#### Scenario: Booking reply is cut off
+- **WHEN** the dispatcher interrupts while the agent is reading out a booking
+- **THEN** any further `book_repair` returns the same booking with `alreadyBooked`, and no bay is taken
+
