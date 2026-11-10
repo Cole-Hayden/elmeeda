@@ -4,6 +4,8 @@ A browser voice agent that handles a truck breakdown. A fleet dispatcher describ
 
 Requires [uv](https://docs.astral.sh/uv/), Docker, Node.js, and an OpenAI API key for voice.
 
+Here's a link of me going through the code and explaining different aspects of it, https://www.loom.com/share/6a22892fcb2a4de8ba29c5faebb1f010
+
 ## How it works
 
 The model only talks. Code decides prices, which shops qualify, and whether a booking is allowed.
